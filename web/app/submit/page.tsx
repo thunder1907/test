@@ -117,9 +117,14 @@ export default function SubmitPage() {
     setLoading(true);
 
     try {
+      // Generate a random ID to completely avoid the "User_pkey" sequence 
+      // conflict caused by previous CSV data imports.
+      const randomId = Math.floor(Math.random() * 10000000) + 10000;
+
       const { error: insertError } = await supabase
         .from("Complain_Data")
         .insert({
+          complaint_id: randomId,
           email: userEmail,
           product_type: productType,
           date: buyDate,

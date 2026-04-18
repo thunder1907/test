@@ -32,7 +32,8 @@ export default function HistoryPage() {
             .from("Complain_Data")
             .select("*")
             .eq("email", session.user.email)
-            .order("date", { ascending: false });
+            .order("complaint_id", { ascending: false })
+            .limit(5000);
 
           if (data) setComplaints(data);
         } else {
@@ -40,7 +41,8 @@ export default function HistoryPage() {
           const { data } = await supabase
             .from("Complain_Data")
             .select("*")
-            .order("date", { ascending: false });
+            .order("complaint_id", { ascending: false })
+            .limit(5000);
 
           if (data) setComplaints(data);
         }
