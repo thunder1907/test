@@ -42,11 +42,28 @@ export default function LandingPage() {
         if (error) throw error;
         router.push('/dashboard');
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { error, data } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
-        if (error) throw error;
+        
+        // AUTO-SIGNUP HACK FOR PROTOTYPE:
+        if (error && error.message.includes('Invalid login credentials')) {
+          const { error: signUpError, data: signUpData } = await supabase.auth.signUp({
+            email,
+            password,
+          });
+          
+          if (!signUpError && signUpData?.user) {
+            await supabase.auth.signInWithPassword({ email, password });
+            router.push('/dashboard');
+            return;
+          }
+          throw error; 
+        } else if (error) {
+          throw error;
+        }
+        
         router.push('/dashboard');
       }
     } catch (err: any) {
