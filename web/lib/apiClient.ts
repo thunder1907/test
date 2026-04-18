@@ -1,4 +1,4 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 export async function analyzeComplaint(complaint: string) {
   const res = await fetch(`${BASE_URL}/analyze`, {
