@@ -1,7 +1,9 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 const navItems = [
   {
@@ -35,6 +37,25 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const [userName, setUserName] = useState<string>("");
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        const name = session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "User";
+        setUserName(name);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        const name = session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "User";
+        setUserName(name);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   return (
     <aside
@@ -44,7 +65,7 @@ export default function Sidebar() {
         borderColor: "var(--card-border)",
       }}
     >
-      {/* Logo */}
+      {/* Logo & Greeting */}
       <div className="px-5 py-5 border-b" style={{ borderColor: "var(--card-border)" }}>
         <div className="flex items-center gap-3">
           <div
@@ -55,7 +76,7 @@ export default function Sidebar() {
           </div>
           <div>
             <h1 className="font-semibold text-sm" style={{ color: "var(--foreground)" }}>
-              ComplaintIQ
+              {userName ? `Hi, ${userName}` : "ComplaintIQ"}
             </h1>
             <p className="text-[10px] font-medium" style={{ color: "var(--muted)" }}>
               Intelligence Engine
@@ -94,9 +115,21 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="px-5 py-3 border-t" style={{ borderColor: "var(--card-border)" }}>
-        <p className="text-[10px]" style={{ color: "#9ca3af" }}>
+      {/* Footer & Logout */}
+      <div className="px-5 py-4 border-t" style={{ borderColor: "var(--card-border)" }}>
+        <button 
+          onClick={async () => {
+            const { supabase } = await import('@/lib/supabase');
+            await supabase.auth.signOut();
+          }}
+          className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] font-medium text-red-600 hover:bg-red-50 transition-all duration-150 mb-3"
+        >
+          <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          Log out
+        </button>
+        <p className="text-[10px] text-center" style={{ color: "#9ca3af" }}>
           Lakshya 2.0 — Haastra
         </p>
       </div>

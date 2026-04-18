@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
+import ClientLayout from "@/components/ClientLayout";
 
 const inter = Inter({
   variable: "--font-geist-sans",
@@ -23,10 +23,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
       <body className="min-h-full flex" style={{ background: "#ffffff", color: "#111827" }}>
-        <Sidebar />
-        <main className="flex-1 ml-[240px] min-h-screen" style={{ background: "#ffffff" }}>
-          <div className="max-w-6xl mx-auto px-8 py-8">{children}</div>
-        </main>
+        <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
   );

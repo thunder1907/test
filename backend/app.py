@@ -1,10 +1,10 @@
 import os
+import sys
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-from analyzer import categorize_complaint
-from priority import calculate_priority
-from fake_detector import is_suspicious
-from recommender import recommend_actions
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from api.app.services.llm import classify_complaint
 
 app = Flask(__name__, static_folder='../web/out', static_url_path='/')
 CORS(app)
@@ -23,34 +23,58 @@ def serve(path):
 
 def process_single_complaint(text):
     """
-    Process a single complaint text through all modular logic pipelines.
+    Process a single complaint text through the Groq LLM pipeline.
+    If the LLM fails, automatically fallback to our rule-based engine.
     """
-    # 1. Categorize
-    category = categorize_complaint(text)
-    
-    # 2. Priority
-    priority, priority_reasons = calculate_priority(text)
-    
-    # 3. Fake detection
-    suspicious, fake_reasons = is_suspicious(text)
-    status = "Suspicious" if suspicious else "Valid"
-    
-    # Combine reasons
-    all_reasons = priority_reasons + fake_reasons
-    if not all_reasons:
-        all_reasons = ["Normal processing"]
+    try:
+        # Call the Groq LLM Service
+        res = classify_complaint(text, channel="web")
         
-    # 4. Recommend actions
-    actions = recommend_actions(category, priority, suspicious)
-    
-    return {
-        "complaint": text,
-        "category": category,
-        "priority": priority,
-        "status": status,
-        "reason": all_reasons,
-        "actions": actions
-    }
+        reasons = res.priority_reasons + res.suspicious_reasons
+        if not reasons:
+            reasons = ["Normal processing"]
+            
+        return {
+            "complaint": text,
+            "category": res.category,
+            "priority": res.priority,
+            "status": "Suspicious" if res.is_suspicious else "Valid",
+            "reason": reasons,
+            "actions": res.recommended_actions
+        }
+    except Exception as e:
+        print(f"LLM Error: {e} -> Falling back to rule-based engine")
+        
+        # Ensure backend directory is in path for imports
+        import sys
+        backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'backend'))
+        if backend_path not in sys.path:
+            sys.path.insert(0, backend_path)
+            
+        from analyzer import categorize_complaint
+        from priority import calculate_priority
+        from fake_detector import is_suspicious
+        from recommender import recommend_actions
+        
+        category = categorize_complaint(text)
+        priority, priority_reasons = calculate_priority(text)
+        suspicious, fake_reasons = is_suspicious(text)
+        status = "Suspicious" if suspicious else "Valid"
+        
+        all_reasons = priority_reasons + fake_reasons
+        if not all_reasons:
+            all_reasons = ["Normal processing"]
+            
+        actions = recommend_actions(category, priority, suspicious)
+        
+        return {
+            "complaint": text,
+            "category": category,
+            "priority": priority,
+            "status": status,
+            "reason": all_reasons,
+            "actions": actions
+        }
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
@@ -81,4 +105,4 @@ def analyze():
         return jsonify({"error": "Missing 'complaint' string or 'complaints' array in payload"}), 400
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    app.run(debug=True, host='127.0.0.1', port=5001)

@@ -1,46 +1,77 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { AnalysisResult } from "@/lib/types";
+import { supabase } from "@/lib/supabase";
+import { getUserRole } from "@/lib/roles";
+
+interface Complaint {
+  id?: string;
+  product_type: string;
+  date: string;
+  category: string;
+  text: string;
+  resolve_status: string;
+  email: string;
+}
 
 export default function HistoryPage() {
-  const [history, setHistory] = useState<AnalysisResult[]>([]);
+  const [role, setRole] = useState<"owner" | "employee">("employee");
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("All");
 
   useEffect(() => {
-    const stored = localStorage.getItem("complaint-history");
-    if (stored) setHistory(JSON.parse(stored));
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const userRole = getUserRole(session.user.email);
+        setRole(userRole);
+
+        // Fetch complaints from Supabase
+        if (userRole === "employee") {
+          const { data } = await supabase
+            .from("Complain_Data")
+            .select("*")
+            .eq("email", session.user.email)
+            .order("date", { ascending: false });
+
+          if (data) setComplaints(data);
+        } else {
+          // Owner sees ALL complaints
+          const { data } = await supabase
+            .from("Complain_Data")
+            .select("*")
+            .order("date", { ascending: false });
+
+          if (data) setComplaints(data);
+        }
+        setLoading(false);
+      }
+    });
   }, []);
 
-  const filtered =
-    filter === "All"
-      ? history
-      : history.filter(
-          (r) => r.priority === filter || r.category === filter || r.status === filter
-        );
-
-  const clearHistory = () => {
-    localStorage.removeItem("complaint-history");
-    setHistory([]);
-  };
-
-  const prioStyle = (priority: string) => {
-    switch (priority) {
-      case "High":
-        return { background: "#fef2f2", color: "#dc2626" };
-      case "Medium":
-        return { background: "#fffbeb", color: "#d97706" };
+  const statusStyle = (status: string) => {
+    switch (status) {
+      case "submitted":
+        return { background: "#fffbeb", color: "#d97706", label: "Submitted" };
+      case "in_progress":
+        return { background: "#eff6ff", color: "#2563eb", label: "In Progress" };
+      case "resolved":
+        return { background: "#ecfdf5", color: "#059669", label: "Resolved" };
+      case "rejected":
+        return { background: "#fef2f2", color: "#dc2626", label: "Rejected" };
       default:
-        return { background: "#ecfdf5", color: "#059669" };
+        return { background: "#f3f4f6", color: "#6b7280", label: status };
     }
   };
 
-  const statusStyle = (status: string) =>
-    status === "Suspicious"
-      ? { background: "#fef2f2", color: "#dc2626" }
-      : { background: "#ecfdf5", color: "#059669" };
+  const filtered =
+    filter === "All"
+      ? complaints
+      : complaints.filter(
+          (c) => c.resolve_status === filter || c.product_type === filter || c.category === filter
+        );
 
-  const filters = ["All", "High", "Medium", "Low", "Valid", "Suspicious"];
+  const filters = ["All", "submitted", "in_progress", "resolved", "rejected"];
 
   return (
     <div>
@@ -48,25 +79,12 @@ export default function HistoryPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold mb-1" style={{ color: "#111827" }}>
-            Analysis History
+            Complaint History
           </h1>
           <p className="text-sm" style={{ color: "#6b7280" }}>
-            {history.length} complaint{history.length !== 1 ? "s" : ""} analyzed
+            {role === "employee" ? "Your" : "All"} registered complaints and their current status
           </p>
         </div>
-        {history.length > 0 && (
-          <button
-            onClick={clearHistory}
-            className="text-xs px-3 py-1.5 rounded-lg font-semibold border transition-colors hover:opacity-80"
-            style={{
-              color: "#dc2626",
-              borderColor: "#fecaca",
-              background: "#fef2f2",
-            }}
-          >
-            Clear History
-          </button>
-        )}
       </div>
 
       {/* Filters */}
@@ -75,19 +93,24 @@ export default function HistoryPage() {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className="text-xs px-3.5 py-1.5 rounded-full font-medium transition-all duration-150"
+            className="text-xs px-3.5 py-1.5 rounded-full font-medium transition-all duration-150 capitalize border"
             style={{
-              background: filter === f ? "#6d28d9" : "#f3f4f6",
+              background: filter === f ? "#6d28d9" : "#ffffff",
               color: filter === f ? "#ffffff" : "#6b7280",
+              borderColor: filter === f ? "#6d28d9" : "#e5e7eb",
             }}
           >
-            {f}
+            {f === "submitted" ? "Pending" : f}
           </button>
         ))}
       </div>
 
       {/* Results */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <div className="h-8 w-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      ) : filtered.length === 0 ? (
         <div
           className="rounded-xl p-10 border text-center"
           style={{ background: "#ffffff", borderColor: "#e5e7eb" }}
@@ -98,24 +121,18 @@ export default function HistoryPage() {
             </svg>
           </div>
           <p className="text-sm font-medium" style={{ color: "#374151" }}>
-            {history.length === 0
-              ? "No complaints analyzed yet"
+            {complaints.length === 0
+              ? "No complaints registered yet"
               : "No complaints match this filter"}
           </p>
-          {history.length === 0 && (
-            <p className="text-xs mt-1" style={{ color: "#9ca3af" }}>
-              Submit one to get started
-            </p>
-          )}
         </div>
       ) : (
-        <div className="space-y-3">
-          {filtered
-            .slice()
-            .reverse()
-            .map((item, idx) => (
+        <div className="space-y-4">
+          {filtered.map((item, idx) => {
+            const style = statusStyle(item.resolve_status);
+            return (
               <div
-                key={idx}
+                key={item.id || idx}
                 className="rounded-xl p-5 border animate-fade-in-up"
                 style={{
                   background: "#ffffff",
@@ -124,49 +141,39 @@ export default function HistoryPage() {
                   animationDelay: `${idx * 40}ms`,
                 }}
               >
-                <p className="text-sm font-medium mb-3" style={{ color: "#111827" }}>
-                  &ldquo;{item.complaint}&rdquo;
-                </p>
+                <div className="flex justify-between items-start mb-3">
+                  <p className="text-sm font-medium pr-4" style={{ color: "#111827" }}>
+                    &ldquo;{item.text}&rdquo;
+                  </p>
+                  <span
+                    className="text-[11px] font-semibold px-2.5 py-1 rounded-full shrink-0"
+                    style={{ background: style.background, color: style.color }}
+                  >
+                    {style.label}
+                  </span>
+                </div>
 
-                <div className="flex flex-wrap gap-2 mb-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <span
                     className="text-[11px] font-semibold px-2.5 py-1 rounded-full"
                     style={{ background: "#eff6ff", color: "#2563eb" }}
                   >
+                    {item.product_type}
+                  </span>
+                  <span className="text-xs" style={{ color: "#9ca3af" }}>•</span>
+                  <span
+                    className="text-[11px] font-semibold px-2.5 py-1 rounded-full"
+                    style={{ background: "#f3f4f6", color: "#4b5563" }}
+                  >
                     {item.category}
                   </span>
-                  <span
-                    className="text-[11px] font-semibold px-2.5 py-1 rounded-full"
-                    style={prioStyle(item.priority)}
-                  >
-                    {item.priority}
+                  <span className="text-xs ml-auto" style={{ color: "#9ca3af" }}>
+                    Purchased: {item.date ? new Date(item.date).toLocaleDateString() : 'N/A'}
                   </span>
-                  <span
-                    className="text-[11px] font-semibold px-2.5 py-1 rounded-full"
-                    style={statusStyle(item.status)}
-                  >
-                    {item.status}
-                  </span>
-                </div>
-
-                <div className="flex flex-wrap gap-1.5">
-                  {item.actions.slice(0, 2).map((a, i) => (
-                    <span
-                      key={i}
-                      className="text-[11px] px-2 py-0.5 rounded font-medium"
-                      style={{ background: "#eff6ff", color: "#1e40af" }}
-                    >
-                      → {a}
-                    </span>
-                  ))}
-                  {item.actions.length > 2 && (
-                    <span className="text-[11px] px-2 py-0.5 rounded" style={{ color: "#9ca3af" }}>
-                      +{item.actions.length - 2} more
-                    </span>
-                  )}
                 </div>
               </div>
-            ))}
+            );
+          })}
         </div>
       )}
     </div>
